@@ -1,0 +1,11 @@
+# Requirements file for the Hybrid WDN Algorithm Comparison simulation (wdn_algorithm_comparison.py)
+
+# Core scientific computing and plotting libraries
+numpy
+matplotlib
+networkx
+
+
+
+
+#pip install -r requirements.txt

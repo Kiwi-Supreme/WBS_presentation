@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Animated Max-Flow Efficiency Illustration</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600&display=swap" rel="stylesheet">
+<style>
+ body{font-family:'Inter',sans-serif;background:#fff;}
+ canvas{display:block;margin:auto;}
+ .caption{font-size:.9rem;color:#4b5563;text-align:center;margin-top:.5rem;}
+</style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen">
+
+<h1 class="text-2xl md:text-3xl font-semibold text-gray-800 mb-4">Animated Flow Efficiency — Hybrid vs Classical Algorithms</h1>
+<canvas id="flowCanvas" width="900" height="420"></canvas>
+<p class="caption">Each tank fills to its achieved efficiency (%). The Hybrid Model attains the highest level due to IoT-enabled capacity scaling and reduced pressure loss.</p>
+
+<script>
+const canvas=document.getElementById("flowCanvas");
+const ctx=canvas.getContext("2d",{alpha:true});
+
+// Static efficiencies (%)
+const tanks=[
+ {label:"Ford–Fulkerson",color:"#3498db",target:93},
+ {label:"Edmonds–Karp",color:"#6366f1",target:93},
+ {label:"Dinic’s Algorithm",color:"#f1c40f",target:93},
+ {label:"Proposed Hybrid Model",color:"#16a34a",target:98}
+];
+
+const state={current:tanks.map(()=>0)};
+function draw(){
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+ const pad=40,w=120,gap=70,h=300,y0=60;
+ ctx.textAlign="center";ctx.textBaseline="middle";ctx.lineWidth=2;
+ const time=Date.now()/1000;
+
+ tanks.forEach((t,i)=>{
+   const x=pad+i*(w+gap);
+   const fill=state.current[i]/100*h;
+   // tank outline
+   ctx.strokeStyle="#cbd5e1";
+   ctx.strokeRect(x,y0,w,h);
+   // water fill
+   const top=y0+h-fill;
+   const grad=ctx.createLinearGradient(0,top,0,y0+h);
+   grad.addColorStop(0,hexToRgba(t.color,0.95));
+   grad.addColorStop(1,hexToRgba(t.color,0.6));
+   ctx.fillStyle=grad;
+   ctx.fillRect(x,top,w,fill);
+
+   // wave
+   ctx.beginPath();
+   const A=(t.label.includes("Hybrid"))?6:3;
+   for(let sx=0;sx<=w;sx++){
+     const px=x+sx;
+     const py=top+Math.sin((sx/25)+time*1.5)*(A);
+     sx===0?ctx.moveTo(px,py):ctx.lineTo(px,py);
+   }
+   ctx.lineTo(x+w,y0+h);ctx.lineTo(x,y0+h);ctx.closePath();
+   ctx.fillStyle=hexToRgba("#fff",0.08);ctx.fill();
+
+   // label and value
+   ctx.fillStyle="#111827";
+   ctx.font="600 15px Inter";
+   ctx.fillText(t.label,x+w/2,y0-20);
+   ctx.font="600 16px Inter";
+   ctx.fillText(state.current[i].toFixed(1)+"%",x+w/2,y0+h+25);
+ });
+}
+
+function animate(){
+ let done=true;
+ tanks.forEach((t,i)=>{
+   const diff=t.target-state.current[i];
+   if(Math.abs(diff)>0.1){state.current[i]+=diff*0.05;done=false;}
+   else state.current[i]=t.target;
+ });
+ draw();
+ requestAnimationFrame(animate);
+}
+
+function hexToRgba(hex,a=1){
+ const h=hex.replace("#","");const n=parseInt(h.length===3?h.split("").map(s=>s+s).join(""):h,16);
+ const r=(n>>16)&255,g=(n>>8)&255,b=n&255;return`rgba(${r},${g},${b},${a})`;
+}
+animate();
+</script>
+</body>
+</html>
