@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hybrid Max-Flow WDN Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+:root {
+  --bg1: #f1f5f9;
+  --bg2: #e2e8f0;
+  --panel: #ffffff;
+  --ink: #0f172a;
+  --ok: #0f766e;
+  --warn: #b45309;
+  --bad: #b91c1c;
+}
+body {
+  margin: 0;
+  color: var(--ink);
+  background: radial-gradient(circle at 20% 20%, var(--bg1), var(--bg2));
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+.card { background: var(--panel); border: 1px solid #cbd5e1; border-radius: 14px; }
+.alert-ok { color: var(--ok); }
+.alert-warn { color: var(--warn); }
+.alert-bad { color: var(--bad); }
+</style>
+</head>
+<body>
+<div class="max-w-6xl mx-auto p-6 space-y-5">
+  <header class="card p-5">
+    <h1 class="text-2xl font-semibold">Hybrid Max-Flow WDN Simulator</h1>
+    <p class="text-slate-600 mt-1">Dinic + Capacity Scaling + IoT threshold sensors (pressure, flow, consumption, tank level).</p>
+  </header>
+
+  <section class="grid md:grid-cols-3 gap-4">
+    <div class="card p-4 md:col-span-2 space-y-4">
+      <h2 class="text-lg font-semibold">Network Setup</h2>
+      <div class="grid sm:grid-cols-3 gap-3">
+        <label class="block">
+          <span class="text-sm text-slate-600">Network Mode</span>
+          <select id="mode" class="mt-1 w-full border rounded-lg p-2">
+            <option value="custom">Build custom network</option>
+            <option value="prebuilt" selected>Use prebuilt city network</option>
+          </select>
+        </label>
+        <label class="block">
+          <span class="text-sm text-slate-600">City (for prebuilt)</span>
+          <select id="city" class="mt-1 w-full border rounded-lg p-2">
+            <option value="MetroCity">MetroCity</option>
+            <option value="RiverTown">RiverTown</option>
+            <option value="HillZone">HillZone</option>
+          </select>
+        </label>
+        <label class="block">
+          <span class="text-sm text-slate-600">Snapshot Hour</span>
+          <select id="hour" class="mt-1 w-full border rounded-lg p-2">
+            <option value="00:00">00:00</option>
+            <option value="06:00">06:00</option>
+            <option value="12:00" selected>12:00</option>
+            <option value="18:00">18:00</option>
+          </select>
+        </label>
+      </div>
+      <button id="runBtn" class="bg-slate-900 text-white rounded-lg px-4 py-2">Run Sensor Check</button>
+      <p id="status" class="text-sm text-slate-500">Using sample in-browser data for quick simulation.</p>
+    </div>
+
+    <div class="card p-4">
+      <h2 class="text-lg font-semibold">Sensor Thresholds</h2>
+      <ul class="text-sm mt-2 space-y-1 text-slate-700">
+        <li>Pressure: 30 to 85 psi</li>
+        <li>Flow anomaly: above 140 lps</li>
+        <li>Tank low level: below 25%</li>
+        <li>Consumption: used for dynamic demand scaling</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="card p-4">
+    <h2 class="text-lg font-semibold">Sensor Snapshot</h2>
+    <div class="overflow-x-auto mt-3">
+      <table class="min-w-full text-sm">
+        <thead>
+          <tr class="text-left border-b">
+            <th class="p-2">Time</th>
+            <th class="p-2">Node</th>
+            <th class="p-2">Pressure (psi)</th>
+            <th class="p-2">Flow (lps)</th>
+            <th class="p-2">Consumption (lps)</th>
+            <th class="p-2">Tank Level (%)</th>
+          </tr>
+        </thead>
+        <tbody id="sensorRows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card p-4">
+    <h2 class="text-lg font-semibold">Control Alerts</h2>
+    <ul id="alerts" class="mt-3 space-y-1 text-sm"></ul>
+  </section>
+</div>
+
+<script>
+const DATA = {
+  MetroCity: {
+    "00:00": [
+      ["00:00", "Source", 62.0, 60.8, 3.3, 90.7],
+      ["00:00", "HOSP", 62.6, 37.1, 3.2, 78.8],
+      ["00:00", "FIRE", 42.6, 44.2, 3.3, 78.2],
+      ["00:00", "SCHOOL", 63.3, 38.8, 5.9, 78.8],
+      ["00:00", "RES_A", 36.7, 20.5, 2.7, 79.6],
+    ],
+    "06:00": [
+      ["06:00", "Source", 62.0, 70.0, 4.6, 79.9],
+      ["06:00", "HOSP", 45.4, 36.8, 7.3, 70.1],
+      ["06:00", "FIRE", 34.2, 57.6, 8.1, 68.9],
+      ["06:00", "SCHOOL", 51.5, 45.2, 4.2, 69.1],
+      ["06:00", "RES_A", 41.3, 29.3, 3.5, 68.0],
+    ],
+    "12:00": [
+      ["12:00", "Source", 61.3, 78.5, 3.2, 63.4],
+      ["12:00", "HOSP", 33.8, 64.1, 7.5, 60.2],
+      ["12:00", "SCHOOL", 48.6, 52.2, 5.1, 58.7],
+      ["12:00", "RES_A", 42.5, 46.9, 4.7, 57.1],
+      ["12:00", "FIRE", 29.2, 95.3, 6.6, 58.8],
+    ],
+    "18:00": [
+      ["18:00", "Source", 62.0, 82.3, 5.0, 24.1],
+      ["18:00", "HOSP", 31.1, 80.4, 7.7, 19.7],
+      ["18:00", "FIRE", 28.7, 110.2, 8.0, 18.5],
+      ["18:00", "SCHOOL", 44.2, 56.8, 5.9, 20.3],
+      ["18:00", "RES_A", 38.9, 51.3, 5.4, 19.2],
+    ],
+  },
+  RiverTown: {
+    "00:00": [["00:00","Source",62.0,55.0,2.8,91.0],["00:00","HOSP",39.0,40.2,3.1,76.0],["00:00","IND",43.2,42.1,3.7,75.0],["00:00","RES",46.1,35.3,2.9,74.0]],
+    "06:00": [["06:00","Source",62.0,66.2,4.1,81.4],["06:00","HOSP",35.5,57.4,7.2,70.2],["06:00","IND",37.8,62.1,5.3,69.9],["06:00","RES",40.2,44.0,4.8,68.8]],
+    "12:00": [["12:00","Source",62.0,71.3,3.6,69.8],["12:00","HOSP",32.4,69.2,6.9,59.4],["12:00","IND",36.2,58.4,4.6,58.0],["12:00","RES",41.8,49.7,4.0,57.1]],
+    "18:00": [["18:00","Source",62.0,79.7,4.8,23.2],["18:00","HOSP",29.3,82.1,8.0,18.8],["18:00","IND",33.7,74.5,5.8,19.4],["18:00","RES",37.4,62.8,5.1,17.9]],
+  },
+  HillZone: {
+    "00:00": [["00:00","Source",62.0,57.1,3.1,90.2],["00:00","EMERG",40.1,45.5,3.9,77.1],["00:00","SCHOOL",44.2,36.7,4.4,76.2],["00:00","RES",47.5,32.4,3.2,75.9]],
+    "06:00": [["06:00","Source",62.0,69.2,4.9,80.4],["06:00","EMERG",34.8,59.1,7.8,69.6],["06:00","SCHOOL",38.4,46.8,5.4,68.9],["06:00","RES",41.6,41.0,4.7,67.3]],
+    "12:00": [["12:00","Source",62.0,73.5,3.7,68.1],["12:00","EMERG",33.2,71.7,7.1,57.3],["12:00","SCHOOL",37.3,52.0,5.0,56.1],["12:00","RES",42.7,45.1,4.3,55.8]],
+    "18:00": [["18:00","Source",62.0,81.8,5.2,24.6],["18:00","EMERG",28.9,98.4,8.2,18.0],["18:00","SCHOOL",35.1,59.3,6.1,19.2],["18:00","RES",39.2,52.6,5.2,18.4]],
+  },
+};
+
+function getSelectedRows() {
+  const mode = document.getElementById("mode").value;
+  const city = document.getElementById("city").value;
+  const hour = document.getElementById("hour").value;
+
+  if (mode === "custom") {
+    // Placeholder in UI-only demo.
+    return { rows: DATA.MetroCity[hour], status: "Custom mode selected in UI. Showing MetroCity sample data for preview." };
+  }
+
+  const rows = (DATA[city] && DATA[city][hour]) ? DATA[city][hour] : [];
+  return { rows, status: `Showing ${city} snapshot at ${hour}.` };
+}
+
+function loadRows(rows) {
+  const tbody = document.getElementById("sensorRows");
+  tbody.innerHTML = "";
+
+  rows.forEach(r => {
+    const tr = document.createElement("tr");
+    tr.className = "border-b";
+    tr.innerHTML = `
+      <td class="p-2">${r[0]}</td>
+      <td class="p-2">${r[1]}</td>
+      <td class="p-2">${r[2]}</td>
+      <td class="p-2">${r[3]}</td>
+      <td class="p-2">${r[4]}</td>
+      <td class="p-2">${r[5]}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function evaluateAlerts(rows) {
+  const out = document.getElementById("alerts");
+  out.innerHTML = "";
+
+  const messages = [];
+  rows.forEach(r => {
+    const node = r[1], p = r[2], f = r[3], tank = r[5];
+    if (p < 30) messages.push({ text: `Low pressure at ${node} (${p} psi): isolate segment and reroute`, cls: "alert-bad" });
+    else if (p > 85) messages.push({ text: `High pressure at ${node} (${p} psi): throttle downstream valve`, cls: "alert-warn" });
+    if (f > 140) messages.push({ text: `Flow spike at ${node} (${f} lps): reduce edge capacities`, cls: "alert-warn" });
+    if (node === "Source" && tank > 0 && tank < 25) messages.push({ text: `Low source tank level (${tank}%): reduce total supply`, cls: "alert-bad" });
+  });
+
+  if (!messages.length) messages.push({ text: "All sensors within threshold range.", cls: "alert-ok" });
+
+  messages.forEach(m => {
+    const li = document.createElement("li");
+    li.className = m.cls;
+    li.textContent = m.text;
+    out.appendChild(li);
+  });
+}
+
+function runSimulation() {
+  const { rows, status } = getSelectedRows();
+  document.getElementById("status").textContent = status;
+  loadRows(rows);
+  evaluateAlerts(rows);
+}
+
+document.getElementById("runBtn").addEventListener("click", runSimulation);
+document.getElementById("mode").addEventListener("change", runSimulation);
+document.getElementById("city").addEventListener("change", runSimulation);
+document.getElementById("hour").addEventListener("change", runSimulation);
+
+runSimulation();
+</script>
+</body>
+</html>
