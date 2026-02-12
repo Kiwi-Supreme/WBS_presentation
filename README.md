@@ -67,7 +67,7 @@ This simulator models that behavior by:
 
 ## Why This Model Is Better (Paper Alignment)
 
-The paper proposes **Dinic�s + capacity scaling + IoT threshold sensing** with priority service and fast rerouting.
+The paper proposes **Dinic's + capacity scaling + IoT threshold sensing** with priority service and fast rerouting.
 
 This project reflects that directly:
 - `apply_sensor_controls` implements threshold-based adaptive capacity adjustments
